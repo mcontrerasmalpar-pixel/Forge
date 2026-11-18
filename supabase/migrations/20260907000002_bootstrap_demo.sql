@@ -65,4 +65,5 @@ begin
 end;
 $$;
 
+revoke all on function public.forge_bootstrap_demo() from public;
 grant execute on function public.forge_bootstrap_demo() to authenticated;

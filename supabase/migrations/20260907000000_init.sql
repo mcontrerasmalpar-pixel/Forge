@@ -49,6 +49,9 @@ as $$
   select org_id from public.memberships where user_id = auth.uid();
 $$;
 
+revoke all on function public.my_org_ids() from public;
+grant execute on function public.my_org_ids() to authenticated, service_role;
+
 alter table public.organizations enable row level security;
 alter table public.memberships enable row level security;
 alter table public.documents enable row level security;
@@ -77,10 +80,6 @@ create policy "documents: update own org"
   on public.documents for update
   using (org_id in (select public.my_org_ids()))
   with check (org_id in (select public.my_org_ids()));
-
-create policy "usage: insert own"
-  on public.usage_events for insert
-  with check (user_id = auth.uid());
 
 create policy "usage: select own"
   on public.usage_events for select

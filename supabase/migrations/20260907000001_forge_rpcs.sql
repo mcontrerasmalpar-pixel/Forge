@@ -71,6 +71,11 @@ begin
   if q is null or length(q) > 4000 then
     raise exception 'invalid query';
   end if;
+  if position(';' in q) > 0 or q ~* '\m(insert|update|delete|drop|alter|truncate|grant|revoke|copy|create|comment|vacuum|refresh|call|do|analyze|set|reset|discard|lock)\M' then
+    raise exception 'refused: statement is not read-only';
+  end if;
+  execute 'set local default_transaction_read_only = on';
+  execute 'set local statement_timeout = ''3s''';
   execute format('explain (format json) %s', q) into plan;
   return plan;
 end;
@@ -88,7 +93,11 @@ begin
   if q is null or length(q) > 4000 then
     raise exception 'invalid query';
   end if;
+  if position(';' in q) > 0 or q ~* '\m(insert|update|delete|drop|alter|truncate|grant|revoke|copy|create|comment|vacuum|refresh|call|do|analyze|explain|set|reset|discard|lock)\M' then
+    raise exception 'refused: statement is not read-only';
+  end if;
   execute 'set local default_transaction_read_only = on';
+  execute 'set local statement_timeout = ''3s''';
   execute format('select coalesce(jsonb_agg(t), ''[]''::jsonb) from (%s) t', q) into result;
   return result;
 end;
@@ -97,6 +106,8 @@ $$;
 revoke all on function public.forge_list_tables() from public;
 revoke all on function public.forge_list_policies() from public;
 revoke all on function public.forge_list_functions() from public;
+revoke all on function public.forge_explain(text) from public;
+revoke all on function public.forge_readonly(text) from public;
 grant execute on function public.forge_list_tables() to service_role;
 grant execute on function public.forge_list_policies() to service_role;
 grant execute on function public.forge_list_functions() to service_role;

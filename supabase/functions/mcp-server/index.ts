@@ -14,7 +14,7 @@ const ALLOWED_TOOLS = [
 
 type ToolName = (typeof ALLOWED_TOOLS)[number];
 
-const WRITE_RE = /\b(insert|update|delete|drop|alter|truncate|grant|revoke|copy|create|comment|vacuum|refresh|call|do)\b/i;
+const WRITE_RE = /\b(insert|update|delete|drop|alter|truncate|grant|revoke|copy|create|comment|vacuum|refresh|call|do|analyze|set|reset|discard|lock|listen|notify|unlisten|prepare|execute|deallocate)\b/i;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -45,13 +45,21 @@ function serviceClient() {
   );
 }
 
-function assertReadonlySql(sql: string) {
-  const stripped = sql.replace(/--.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").trim();
+function assertReadonlySql(sql: string, stripLeadingExplain = false) {
+  let stripped = sql
+    .replace(/--.*$/gm, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .trim()
+    .replace(/;+\s*$/, "")
+    .trim();
+  if (stripLeadingExplain) {
+    stripped = stripped.replace(/^explain\s*(\([^)]*\)\s*)?/i, "").trim();
+  }
   if (!stripped) throw new Error("empty sql");
   if (stripped.includes(";")) throw new Error("multiple statements are not allowed");
   if (WRITE_RE.test(stripped)) throw new Error("refused: statement is not read-only");
-  if (!/^\s*(select|with|explain)\b/i.test(stripped)) {
-    throw new Error("only SELECT / WITH / EXPLAIN are allowed");
+  if (!/^\s*(select|with)\b/i.test(stripped)) {
+    throw new Error("only SELECT / WITH queries are allowed");
   }
   return stripped;
 }
@@ -62,7 +70,7 @@ const TOOLS = [
   { name: "list_functions", description: "List public SQL functions.", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "explain_query", description: "Run EXPLAIN (FORMAT JSON) on a read-only query.", inputSchema: { type: "object", properties: { sql: { type: "string" } }, required: ["sql"] } },
   { name: "propose_rls", description: "Draft an RLS policy. Does NOT apply it.", inputSchema: { type: "object", properties: { table: { type: "string" }, intent: { type: "string" } }, required: ["table", "intent"] } },
-  { name: "run_readonly_sql", description: "Execute a single SELECT/WITH/EXPLAIN as the signed-in user (RLS applies).", inputSchema: { type: "object", properties: { sql: { type: "string" } }, required: ["sql"] } },
+  { name: "run_readonly_sql", description: "Execute a single SELECT/WITH query as the signed-in user (RLS applies).", inputSchema: { type: "object", properties: { sql: { type: "string" } }, required: ["sql"] } },
 ];
 
 async function rateLimit(userId: string, tool: string) {
@@ -96,13 +104,13 @@ async function callTool(name: ToolName, args: Record<string, unknown>, req: Requ
     return data;
   }
   if (name === "explain_query") {
-    const sql = assertReadonlySql(String(args.sql ?? ""));
+    const sql = assertReadonlySql(String(args.sql ?? ""), true);
     const { data, error } = await supabase.rpc("forge_explain", { q: sql });
     if (error) throw error;
     return data;
   }
   if (name === "run_readonly_sql") {
-    const sql = assertReadonlySql(String(args.sql ?? ""));
+    const sql = assertReadonlySql(String(args.sql ?? ""), false);
     const { data, error } = await supabase.rpc("forge_readonly", { q: sql });
     if (error) throw error;
     return data;
@@ -118,10 +126,38 @@ async function callTool(name: ToolName, args: Record<string, unknown>, req: Requ
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return json({ ok: true });
-  let body: { jsonrpc?: string; id?: string | number; method?: string; params?: { name?: string; arguments?: Record<string, unknown> } };
+  let body: { jsonrpc?: string; id?: string | number | null; method?: string; params?: { name?: string; arguments?: Record<string, unknown>; protocolVersion?: string } };
   try { body = await req.json(); } catch { return json({ error: "invalid json" }, 400); }
 
+  if (body.method === "initialize") {
+    return json({
+      jsonrpc: "2.0",
+      id: body.id ?? null,
+      result: {
+        protocolVersion: body.params?.protocolVersion ?? "2024-11-05",
+        capabilities: { tools: {} },
+        serverInfo: { name: "forge-mcp-supabase", version: "0.1.0" },
+      },
+    });
+  }
+  if (body.method === "notifications/initialized") {
+    return new Response(null, {
+      status: 202,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+      },
+    });
+  }
+  if (body.method === "ping") {
+    return json({ jsonrpc: "2.0", id: body.id ?? null, result: {} });
+  }
   if (body.method === "tools/list") {
+    const supabase = userClient(req);
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    if (userErr || !userData.user) {
+      return json({ jsonrpc: "2.0", id: body.id ?? null, error: { code: -32001, message: "unauthorized" } }, 401);
+    }
     return json({ jsonrpc: "2.0", id: body.id, result: { tools: TOOLS } });
   }
   if (body.method === "tools/call") {
