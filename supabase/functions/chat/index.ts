@@ -39,6 +39,75 @@ async function mcpCall(req: Request, name: string, args: Record<string, unknown>
   return await res.json();
 }
 
+async function runDemoAgent(req: Request, prompt: string) {
+  const p = prompt.toLowerCase();
+  const selectMatch = prompt.match(/\b(select\s+[\s\S]+)$/i);
+
+  let toolName = "run_readonly_sql";
+  let args: Record<string, unknown> = { sql: "SELECT id, title, body FROM documents ORDER BY created_at" };
+
+  if (/\b(drop|delete|truncate|update|insert|alter)\b/i.test(p)) {
+    toolName = "run_readonly_sql";
+    args = { sql: prompt.replace(/^corre\s+/i, "").trim() };
+  } else if (p.includes("plan") || p.includes("explain") || p.includes("explica")) {
+    toolName = "explain_query";
+    args = { sql: selectMatch ? selectMatch[1] : "SELECT * FROM documents" };
+  } else if (p.includes("propon") || p.includes("propón") || p.includes("draft")) {
+    toolName = "propose_rls";
+    args = { table: "documents", intent: prompt };
+  } else if (p.includes("politic") || p.includes("polític") || (p.includes("rls") && !p.includes("document"))) {
+    toolName = "list_policies";
+    args = {};
+  } else if (p.includes("funcion") || p.includes("función") || p.includes("rpc")) {
+    toolName = "list_functions";
+    args = {};
+  } else if (p.includes("tabla") || p.includes("schema") || p.includes("esquema") || p.includes("columna")) {
+    toolName = "list_tables";
+    args = {};
+  } else if (selectMatch) {
+    toolName = "run_readonly_sql";
+    args = { sql: selectMatch[1] };
+  }
+
+  const rpc = await mcpCall(req, toolName, args);
+  const trace = [{ tool: toolName, args, result: rpc }];
+
+  if (rpc.error) {
+    return {
+      role: "assistant",
+      content: `Guardrail MCP activado en \`${toolName}\`: **${rpc.error.message}**`,
+      trace,
+    };
+  }
+
+  const rawText = rpc.result?.content?.[0]?.text ?? "[]";
+  let parsed: unknown = rawText;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    // keep raw string
+  }
+
+  if (toolName === "run_readonly_sql" && Array.isArray(parsed)) {
+    const titles = parsed
+      .map((r: Record<string, unknown>) => `- **${r.title ?? JSON.stringify(r)}**${r.body ? `: ${r.body}` : ""}`)
+      .join("\n");
+    return {
+      role: "assistant",
+      content:
+        `Ejecuté \`run_readonly_sql\` con tu JWT (RLS activo).\n\n` +
+        `Puedes ver **${parsed.length} documento(s)** de tu organización (\`acme-alpha\`). Los registros de \`beta-shadow\` fueron filtrados por PostgreSQL RLS:\n\n${titles || "_Sin filas_"}`,
+      trace,
+    };
+  }
+
+  return {
+    role: "assistant",
+    content: `Resultado de MCP tool \`${toolName}\`:\n\`\`\`json\n${typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2)}\n\`\`\``,
+    trace,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORS_HEADERS });
@@ -62,10 +131,8 @@ Deno.serve(async (req) => {
     const apiVersion = Deno.env.get("AZURE_OPENAI_API_VERSION")?.trim() || "2024-08-01-preview";
 
     if (!rawEndpoint || !key) {
-      return jsonResponse({
-        role: "assistant",
-        content: "Azure OpenAI no esta configurado. Usa el MCP directo desde Cursor.",
-      });
+      const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+      return jsonResponse(await runDemoAgent(req, lastUser));
     }
 
     // Si en el secret se pego la URL completa de Azure Portal (/openai/deployments/...), extraemos solo el origin

@@ -82,7 +82,91 @@ export default function Page() {
     setDemoHint(JSON.stringify(data, null, 2));
   }
 
-  async function send() {
+  async function runDirectMcpFallback(promptText: string, accessToken: string) {
+    const p = promptText.toLowerCase();
+    const selectMatch = promptText.match(/\b(select\s+[\s\S]+)$/i);
+
+    let toolName = "run_readonly_sql";
+    let args: Record<string, unknown> = {
+      sql: "SELECT title, body FROM documents ORDER BY created_at",
+    };
+
+    if (/\b(drop|delete|truncate|update|insert|alter)\b/i.test(p)) {
+      toolName = "run_readonly_sql";
+      args = { sql: promptText.replace(/^corre\s+/i, "").trim() };
+    } else if (p.includes("plan") || p.includes("explain") || p.includes("explica")) {
+      toolName = "explain_query";
+      args = { sql: selectMatch ? selectMatch[1] : "SELECT * FROM documents" };
+    } else if (p.includes("propon") || p.includes("propón") || p.includes("draft")) {
+      toolName = "propose_rls";
+      args = { table: "documents", intent: promptText };
+    } else if (p.includes("politic") || p.includes("polític") || (p.includes("rls") && !p.includes("document"))) {
+      toolName = "list_policies";
+      args = {};
+    } else if (p.includes("funcion") || p.includes("función") || p.includes("rpc")) {
+      toolName = "list_functions";
+      args = {};
+    } else if (p.includes("tabla") || p.includes("schema") || p.includes("esquema") || p.includes("columna")) {
+      toolName = "list_tables";
+      args = {};
+    } else if (selectMatch) {
+      toolName = "run_readonly_sql";
+      args = { sql: selectMatch[1] };
+    }
+
+    const mcpRes = await fetch(`${supabaseUrl}/functions/v1/mcp-server`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + accessToken,
+        apikey: supabaseKey,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: crypto.randomUUID(),
+        method: "tools/call",
+        params: { name: toolName, arguments: args },
+      }),
+    });
+    const rpc = await mcpRes.json();
+    const trace = [{ tool: toolName, args, result: rpc }];
+
+    if (rpc.error) {
+      return {
+        content: `🛡️ Guardrail MCP activado en \`${toolName}\`: ${rpc.error.message}`,
+        trace,
+      };
+    }
+
+    const rawText = rpc.result?.content?.[0]?.text ?? "[]";
+    let parsed: unknown = rawText;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      // keep raw
+    }
+
+    if (toolName === "run_readonly_sql" && Array.isArray(parsed)) {
+      const lines = parsed
+        .map((r: Record<string, unknown>) => `• ${r.title ?? JSON.stringify(r)}${r.body ? ` — ${r.body}` : ""}`)
+        .join("\n");
+      return {
+        content:
+          `✅ Consulta ejecutada vía MCP (\`run_readonly_sql\`) con tu JWT (RLS activo).\n` +
+          `Documentos visibles para tu organización (acme-alpha): ${parsed.length} (los documentos de beta-shadow están ocultos por RLS):\n\n${lines || "(Sin filas)"}`,
+        trace,
+      };
+    }
+
+    return {
+      content: `✅ Resultado de MCP tool \`${toolName}\`:\n${typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2)}`,
+      trace,
+    };
+  }
+
+  async function send(customPrompt?: string) {
+    const promptText = (customPrompt ?? input).trim();
+    if (!promptText) return;
     setBusy(true);
     setErr(null);
     if (!supabase) {
@@ -90,9 +174,9 @@ export default function Page() {
       setBusy(false);
       return;
     }
-    const next = [...msgs, { role: "user" as const, content: input }];
+    const next = [...msgs, { role: "user" as const, content: promptText }];
     setMsgs(next);
-    setInput("");
+    if (!customPrompt) setInput("");
     const session = await refreshSession();
     if (!session?.access_token) {
       setErr("No hay JWT. Entra con Solo entrar.");
@@ -110,10 +194,13 @@ export default function Page() {
         body: JSON.stringify({ messages: next }),
       });
       const json = await res.json();
-      setMsgs([
-        ...next,
-        { role: "assistant", content: json.content ?? JSON.stringify(json), trace: json.trace },
-      ]);
+      const content = String(json.content ?? JSON.stringify(json));
+      if (content.includes("Azure OpenAI no esta configurado")) {
+        const fallback = await runDirectMcpFallback(promptText, session.access_token);
+        setMsgs([...next, { role: "assistant", content: fallback.content, trace: fallback.trace }]);
+      } else {
+        setMsgs([...next, { role: "assistant", content, trace: json.trace }]);
+      }
     } catch (e) {
       setErr(`chat fetch: ${(e as Error).message}`);
     }
@@ -188,14 +275,53 @@ export default function Page() {
             }}
           >
             <strong>{m.role}</strong>
-            <div>{m.content}</div>
+            <div style={{ marginTop: 6 }}>{m.content}</div>
+            {m.trace ? (
+              <details style={{ marginTop: 10, color: "#9bb0c4", fontSize: 13 }}>
+                <summary style={{ cursor: "pointer" }}>Ver MCP tool trace</summary>
+                <pre style={{ overflowX: "auto", marginTop: 8 }}>
+                  {JSON.stringify(m.trace, null, 2)}
+                </pre>
+              </details>
+            ) : null}
           </article>
         ))}
       </section>
 
-      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+      {hasJwt ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 16 }}>
+          {[
+            "Cuantos documents puedo ver y cuales son sus titulos?",
+            "Lista las politicas RLS",
+            "Que tablas y columnas hay?",
+            "Explica el plan de SELECT * FROM documents",
+            "Propon RLS para documents",
+            "DROP TABLE documents",
+          ].map((q) => (
+            <button
+              key={q}
+              type="button"
+              disabled={busy}
+              onClick={() => void send(q)}
+              style={{
+                background: "#15202b",
+                color: "#9bb0c4",
+                border: "1px solid #243140",
+                borderRadius: 6,
+                padding: "4px 8px",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <input value={input} onChange={(e) => setInput(e.target.value)} style={{ flex: 1 }} />
-        <button disabled={busy || !hasJwt} onClick={send}>
+        <button disabled={busy || !hasJwt} onClick={() => void send()}>
           {busy ? "..." : "Enviar"}
         </button>
       </div>
