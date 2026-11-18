@@ -1,7 +1,7 @@
-# Enganchar Forge a un proyecto hosted de Supabase
+# Connecting Forge to a Hosted Supabase Project
 
-1. Crea un proyecto en https://supabase.com/dashboard (region cerca de Lima: `sa-east-1` si esta disponible, si no `us-east-1`).
-2. En el repo:
+1. Create a project at https://supabase.com/dashboard (choose a region close to you, e.g., `sa-east-1` or `us-east-1`).
+2. From the repository root:
 
 ```bash
 npx supabase link --project-ref YOUR_REF
@@ -10,29 +10,31 @@ npx supabase functions deploy mcp-server
 npx supabase functions deploy chat
 ```
 
-3. Secrets (chat / Azure, opcional):
+3. Optional Azure OpenAI secrets (for the `chat` Edge Function):
 
 ```bash
-npx supabase secrets set AZURE_OPENAI_ENDPOINT=https://YOUR.openai.azure.com
+npx supabase secrets set AZURE_OPENAI_ENDPOINT=https://YOUR_RESOURCE.openai.azure.com
 npx supabase secrets set AZURE_OPENAI_API_KEY=...
 npx supabase secrets set AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini
 ```
 
-4. `apps/web/.env.local`:
+4. Configure `apps/web/.env.local`:
 
-```
+```env
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_REF.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 ```
 
-5. En la UI: registrate y pulsa **Cargar demo RLS**.
-   Eso te mete en `acme-alpha` y crea docs en `beta-shadow` que no debes ver.
+5. In the web UI: sign up/sign in and click **Seed RLS Demo**.
+   This assigns your user to `acme-alpha` and seeds confidential documents in `beta-shadow` that PostgreSQL RLS prevents your session from reading.
 
-6. Prueba en el assistant:
+6. Test prompts in the assistant UI:
 
-- `Lista las politicas RLS`
-- `Cuantos documents puedo ver?`
-- `SELECT title FROM documents` via tool
-- `DROP TABLE documents` — debe rechazarse
+- `How many documents can I see and what are their titles?`
+- `List RLS policies`
+- `What tables and columns exist?`
+- `Explain the query plan for SELECT * FROM documents`
+- `Propose an RLS policy for documents`
+- `DROP TABLE documents` — blocked by the MCP read-only guardrail
 
-Auth: Authentication > Providers > Email enabled. Desactiva "Confirm email" mientras demos.
+Auth note: Enable **Authentication → Providers → Email** and disable **Confirm email** while running demos.

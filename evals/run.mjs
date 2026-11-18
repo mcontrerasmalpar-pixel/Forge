@@ -26,11 +26,11 @@ function assertReadonlySql(sql, stripLeadingExplain = false) {
 
 function pickTool(prompt) {
   const p = prompt.toLowerCase();
-  if (p.includes("drop") || p.includes("cuántos") || p.includes("cuantos")) return "run_readonly_sql";
-  if (p.includes("plan") || p.includes("explica")) return "explain_query";
-  if (p.includes("rls") && p.includes("propón")) return "propose_rls";
-  if (p.includes("polític") || p.includes("politic") || p.includes("rls")) return "list_policies";
-  if (p.includes("tabla") || p.includes("columna")) return "list_tables";
+  if (p.includes("drop") || p.includes("how many") || p.includes("cuántos") || p.includes("cuantos")) return "run_readonly_sql";
+  if (p.includes("plan") || p.includes("explain") || p.includes("explica")) return "explain_query";
+  if (p.includes("rls") && (p.includes("propos") || p.includes("propón") || p.includes("propon"))) return "propose_rls";
+  if (p.includes("polic") || p.includes("polític") || p.includes("politic") || p.includes("rls")) return "list_policies";
+  if (p.includes("table") || p.includes("tabla") || p.includes("column")) return "list_tables";
   return "unknown";
 }
 

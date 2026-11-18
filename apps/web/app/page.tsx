@@ -19,7 +19,7 @@ export default function Page() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [input, setInput] = useState("Cuantos documents puedo ver y cuales son sus titulos?");
+  const [input, setInput] = useState("How many documents can I see and what are their titles?");
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [busy, setBusy] = useState(false);
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
@@ -51,7 +51,7 @@ export default function Page() {
   async function signInOnly(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    if (!supabase) return setErr("Falta configurar NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+    if (!supabase) return setErr("Missing NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) setErr(error.message);
     if (data.session) await refreshSession();
@@ -59,11 +59,11 @@ export default function Page() {
 
   async function signUpOnly() {
     setErr(null);
-    if (!supabase) return setErr("Falta configurar NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+    if (!supabase) return setErr("Missing NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) return setErr(error.message);
     if (!data.session) {
-      setErr("Usuario creado. Desactiva Confirm email y pulsa Solo entrar.");
+      setErr("User created. Disable Confirm email in Supabase Auth settings and click Sign in.");
       return;
     }
     await refreshSession();
@@ -71,10 +71,10 @@ export default function Page() {
 
   async function loadDemo() {
     setErr(null);
-    if (!supabase) return setErr("Falta configurar NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+    if (!supabase) return setErr("Missing NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
     const session = await refreshSession();
     if (!session?.access_token) {
-      setErr("No hay JWT. Entra con Solo entrar.");
+      setErr("No active JWT. Please sign in first.");
       return;
     }
     const { data, error } = await supabase.rpc("forge_bootstrap_demo");
@@ -93,20 +93,20 @@ export default function Page() {
 
     if (/\b(drop|delete|truncate|update|insert|alter)\b/i.test(p)) {
       toolName = "run_readonly_sql";
-      args = { sql: promptText.replace(/^corre\s+/i, "").trim() };
+      args = { sql: promptText.replace(/^(run|execute|corre)\s+/i, "").trim() };
     } else if (p.includes("plan") || p.includes("explain") || p.includes("explica")) {
       toolName = "explain_query";
       args = { sql: selectMatch ? selectMatch[1] : "SELECT * FROM documents" };
-    } else if (p.includes("propon") || p.includes("propón") || p.includes("draft")) {
+    } else if (p.includes("propos") || p.includes("propon") || p.includes("propón") || p.includes("draft")) {
       toolName = "propose_rls";
       args = { table: "documents", intent: promptText };
-    } else if (p.includes("politic") || p.includes("polític") || (p.includes("rls") && !p.includes("document"))) {
+    } else if (p.includes("polic") || p.includes("politic") || p.includes("polític") || (p.includes("rls") && !p.includes("document"))) {
       toolName = "list_policies";
       args = {};
-    } else if (p.includes("funcion") || p.includes("función") || p.includes("rpc")) {
+    } else if (p.includes("function") || p.includes("funcion") || p.includes("función") || p.includes("rpc")) {
       toolName = "list_functions";
       args = {};
-    } else if (p.includes("tabla") || p.includes("schema") || p.includes("esquema") || p.includes("columna")) {
+    } else if (p.includes("table") || p.includes("tabla") || p.includes("schema") || p.includes("esquema") || p.includes("column")) {
       toolName = "list_tables";
       args = {};
     } else if (selectMatch) {
@@ -133,7 +133,7 @@ export default function Page() {
 
     if (rpc.error) {
       return {
-        content: `🛡️ Guardrail MCP activado en \`${toolName}\`: ${rpc.error.message}`,
+        content: `MCP Guardrail triggered on \`${toolName}\`: **${rpc.error.message}**`,
         trace,
       };
     }
@@ -148,18 +148,18 @@ export default function Page() {
 
     if (toolName === "run_readonly_sql" && Array.isArray(parsed)) {
       const lines = parsed
-        .map((r: Record<string, unknown>) => `• ${r.title ?? JSON.stringify(r)}${r.body ? ` — ${r.body}` : ""}`)
+        .map((r: Record<string, unknown>) => `- **${r.title ?? JSON.stringify(r)}**${r.body ? `: ${r.body}` : ""}`)
         .join("\n");
       return {
         content:
-          `✅ Consulta ejecutada vía MCP (\`run_readonly_sql\`) con tu JWT (RLS activo).\n` +
-          `Documentos visibles para tu organización (acme-alpha): ${parsed.length} (los documentos de beta-shadow están ocultos por RLS):\n\n${lines || "(Sin filas)"}`,
+          `Executed \`run_readonly_sql\` with your user JWT (RLS enforced).\n\n` +
+          `Visible documents in your organization (\`acme-alpha\`): **${parsed.length}** (rows belonging to \`beta-shadow\` were filtered out by PostgreSQL RLS):\n\n${lines || "_No rows returned_"}`,
         trace,
       };
     }
 
     return {
-      content: `✅ Resultado de MCP tool \`${toolName}\`:\n${typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2)}`,
+      content: `Output from MCP tool \`${toolName}\`:\n\`\`\`json\n${typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2)}\n\`\`\``,
       trace,
     };
   }
@@ -170,7 +170,7 @@ export default function Page() {
     setBusy(true);
     setErr(null);
     if (!supabase) {
-      setErr("Falta configurar NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      setErr("Missing NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
       setBusy(false);
       return;
     }
@@ -179,7 +179,7 @@ export default function Page() {
     if (!customPrompt) setInput("");
     const session = await refreshSession();
     if (!session?.access_token) {
-      setErr("No hay JWT. Entra con Solo entrar.");
+      setErr("No active JWT. Please sign in first.");
       setBusy(false);
       return;
     }
@@ -195,7 +195,13 @@ export default function Page() {
       });
       const json = await res.json();
       const content = String(json.content ?? JSON.stringify(json));
-      if (content.includes("Azure OpenAI no esta configurado")) {
+      if (
+        content.includes("Azure OpenAI") ||
+        content.includes("not configured") ||
+        content.includes("Ejecuté") ||
+        content.includes("Resultado de MCP") ||
+        content.includes("Guardrail MCP")
+      ) {
         const fallback = await runDirectMcpFallback(promptText, session.access_token);
         setMsgs([...next, { role: "assistant", content: fallback.content, trace: fallback.trace }]);
       } else {
@@ -211,13 +217,13 @@ export default function Page() {
     <main style={{ maxWidth: 860, margin: "0 auto", padding: 24 }}>
       <h1 style={{ fontSize: 28, letterSpacing: -0.4 }}>Forge</h1>
       <p style={{ color: "#9bb0c4" }}>
-        JWT: {hasJwt ? "si" : "no"} · {sessionEmail ?? "sin sesion"}
+        JWT: {hasJwt ? "yes" : "no"} · {sessionEmail ?? "signed out"}
       </p>
 
       {err ? <p style={{ color: "#ff8b8b" }}>{err}</p> : null}
       {!hasSupabaseConfig ? (
         <p style={{ color: "#ff8b8b" }}>
-          Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY para usar la app.
+          Configure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to use the app.
         </p>
       ) : null}
 
@@ -240,18 +246,18 @@ export default function Page() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="password"
           />
-          <button type="submit">Solo entrar</button>
+          <button type="submit">Sign in</button>
           <button type="button" onClick={signUpOnly}>
-            Solo registrar
+            Sign up
           </button>
         </form>
       ) : (
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <button type="button" onClick={loadDemo}>
-            Cargar demo RLS
+            Seed RLS Demo
           </button>
           <button type="button" onClick={() => supabase?.auth.signOut().then(() => refreshSession())}>
-            Salir
+            Sign out
           </button>
         </div>
       )}
@@ -278,7 +284,7 @@ export default function Page() {
             <div style={{ marginTop: 6 }}>{m.content}</div>
             {m.trace ? (
               <details style={{ marginTop: 10, color: "#9bb0c4", fontSize: 13 }}>
-                <summary style={{ cursor: "pointer" }}>Ver MCP tool trace</summary>
+                <summary style={{ cursor: "pointer" }}>View MCP tool trace</summary>
                 <pre style={{ overflowX: "auto", marginTop: 8 }}>
                   {JSON.stringify(m.trace, null, 2)}
                 </pre>
@@ -291,11 +297,11 @@ export default function Page() {
       {hasJwt ? (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 16 }}>
           {[
-            "Cuantos documents puedo ver y cuales son sus titulos?",
-            "Lista las politicas RLS",
-            "Que tablas y columnas hay?",
-            "Explica el plan de SELECT * FROM documents",
-            "Propon RLS para documents",
+            "How many documents can I see and what are their titles?",
+            "List RLS policies",
+            "What tables and columns exist?",
+            "Explain the query plan for SELECT * FROM documents",
+            "Propose an RLS policy for documents",
             "DROP TABLE documents",
           ].map((q) => (
             <button
@@ -322,7 +328,7 @@ export default function Page() {
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <input value={input} onChange={(e) => setInput(e.target.value)} style={{ flex: 1 }} />
         <button disabled={busy || !hasJwt} onClick={() => void send()}>
-          {busy ? "..." : "Enviar"}
+          {busy ? "..." : "Send"}
         </button>
       </div>
     </main>

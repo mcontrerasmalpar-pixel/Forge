@@ -48,20 +48,20 @@ async function runDemoAgent(req: Request, prompt: string) {
 
   if (/\b(drop|delete|truncate|update|insert|alter)\b/i.test(p)) {
     toolName = "run_readonly_sql";
-    args = { sql: prompt.replace(/^corre\s+/i, "").trim() };
+    args = { sql: prompt.replace(/^(run|execute|corre)\s+/i, "").trim() };
   } else if (p.includes("plan") || p.includes("explain") || p.includes("explica")) {
     toolName = "explain_query";
     args = { sql: selectMatch ? selectMatch[1] : "SELECT * FROM documents" };
-  } else if (p.includes("propon") || p.includes("propón") || p.includes("draft")) {
+  } else if (p.includes("propos") || p.includes("propon") || p.includes("propón") || p.includes("draft")) {
     toolName = "propose_rls";
     args = { table: "documents", intent: prompt };
-  } else if (p.includes("politic") || p.includes("polític") || (p.includes("rls") && !p.includes("document"))) {
+  } else if (p.includes("polic") || p.includes("politic") || p.includes("polític") || (p.includes("rls") && !p.includes("document"))) {
     toolName = "list_policies";
     args = {};
-  } else if (p.includes("funcion") || p.includes("función") || p.includes("rpc")) {
+  } else if (p.includes("function") || p.includes("funcion") || p.includes("función") || p.includes("rpc")) {
     toolName = "list_functions";
     args = {};
-  } else if (p.includes("tabla") || p.includes("schema") || p.includes("esquema") || p.includes("columna")) {
+  } else if (p.includes("table") || p.includes("tabla") || p.includes("schema") || p.includes("esquema") || p.includes("column")) {
     toolName = "list_tables";
     args = {};
   } else if (selectMatch) {
@@ -75,7 +75,7 @@ async function runDemoAgent(req: Request, prompt: string) {
   if (rpc.error) {
     return {
       role: "assistant",
-      content: `Guardrail MCP activado en \`${toolName}\`: **${rpc.error.message}**`,
+      content: `MCP Guardrail triggered on \`${toolName}\`: **${rpc.error.message}**`,
       trace,
     };
   }
@@ -95,15 +95,15 @@ async function runDemoAgent(req: Request, prompt: string) {
     return {
       role: "assistant",
       content:
-        `Ejecuté \`run_readonly_sql\` con tu JWT (RLS activo).\n\n` +
-        `Puedes ver **${parsed.length} documento(s)** de tu organización (\`acme-alpha\`). Los registros de \`beta-shadow\` fueron filtrados por PostgreSQL RLS:\n\n${titles || "_Sin filas_"}`,
+        `Executed \`run_readonly_sql\` with your user JWT (RLS enforced).\n\n` +
+        `Visible documents in your organization (\`acme-alpha\`): **${parsed.length}** (rows belonging to \`beta-shadow\` were filtered out by PostgreSQL RLS):\n\n${titles || "_No rows returned_"}`,
       trace,
     };
   }
 
   return {
     role: "assistant",
-    content: `Resultado de MCP tool \`${toolName}\`:\n\`\`\`json\n${typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2)}\n\`\`\``,
+    content: `Output from MCP tool \`${toolName}\`:\n\`\`\`json\n${typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2)}\n\`\`\``,
     trace,
   };
 }
@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
     );
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) {
-      return jsonResponse({ role: "assistant", content: "No autorizado (JWT invalido o ausente)." }, 401);
+      return jsonResponse({ role: "assistant", content: "Unauthorized (missing or invalid user JWT)." }, 401);
     }
 
     const { messages } = (await req.json()) as { messages: ChatMsg[] };

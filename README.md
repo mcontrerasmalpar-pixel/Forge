@@ -1,55 +1,61 @@
 # Forge
 
-MCP server + assistant de debugging sobre **Supabase Edge Functions**.
+MCP server + debugging assistant running on **Supabase Edge Functions**.
 
-El agente lista schema, explica planes SQL, propone politicas RLS y corre queries de **solo lectura** respetando el JWT del usuario. Nada de `service_role` en el cliente.
+Forge inspects database schemas, explains SQL query plans, drafts RLS policies, and executes **read-only** queries scoped to the signed-in user's JWT. No `service_role` key is ever exposed to the client.
 
-Proyecto hosted: [HOSTED.md](./HOSTED.md)  
-Repo: https://github.com/mcontrerasmalpar-pixel/forge-mcp-supabase
+Hosted setup guide: [HOSTED.md](./HOSTED.md)  
+Repository: https://github.com/mcontrerasmalpar-pixel/forge-mcp-supabase
 
-## Que demuestra (senal para Supabase / AI tooling)
+## What It Demonstrates
 
-- MCP hospedado en Edge Functions (Deno)
-- Tools con allowlist (sin DDL destructivo)
-- **RLS como autorizacion** (no checks en el frontend)
-- Demo multi-tenant: org visible `acme-alpha` vs oculta `beta-shadow`
-- Assistant UI con sesion JWT y boton **Cargar demo RLS**
-- LLM del chat **opcional** (Azure OpenAI u otro); el MCP funciona sin el
+- **MCP Server on Supabase Edge Functions** (Deno, JSON-RPC 2.0)
+- **Allowlisted MCP Tools** with multi-layer read-only SQL guardrails (blocks destructive DDL/DML)
+- **PostgreSQL RLS as the Authorization Layer** (`security invoker` RPCs, zero frontend permission hacks)
+- **Multi-Tenant RLS Isolation Demo**: visible tenant `acme-alpha` vs isolated tenant `beta-shadow`
+- **Next.js Assistant UI** with live JWT session, one-click **Seed RLS Demo**, and expandable **MCP tool trace**
+- **Optional LLM Orchestrator** (`AzureOpenAI` SDK) with a built-in zero-key MCP router fallback so the demo works out of the box
 
-## Arquitectura
+## Architecture
 
 ```
-Cursor / Assistant UI
-        |  MCP JSON-RPC  (user JWT)
+Cursor / Web Assistant UI
+        |  MCP JSON-RPC 2.0 (Bearer User JWT)
         v
-Edge Function  mcp-server
-        |  Postgres + RLS
+Edge Function: mcp-server
+        |  Postgres RPCs + Row Level Security (auth.uid())
         v
-Postgres
+PostgreSQL
 ```
 
-La function `chat` solo orquesta un LLM + tool calls. Si no hay API de modelo configurada, responde que uses el MCP directo (Cursor).
+The `chat` Edge Function orchestrates tool calls via `AzureOpenAI` when configured, or falls back to a deterministic MCP tool router so every tool (`list_tables`, `list_policies`, `list_functions`, `explain_query`, `propose_rls`, `run_readonly_sql`) can be tested live without paid LLM quota.
 
-## Demo hosted (sin Azure)
+## Quick Start (Hosted Supabase Demo)
 
-1. Crea proyecto Supabase y linkea este repo (o `supabase db push` + `functions deploy`).
-2. `apps/web/.env.local`:
+1. Create a Supabase project and link this repository (or run `npx supabase db push` + `npx supabase functions deploy`).
+2. Create `apps/web/.env.local`:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_REF.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...   # legacy anon o publishable
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...   # anon or publishable key
 ```
 
-3. `cd apps/web && npm install && npm run dev`
-4. Desactiva **Confirm email** en Auth → Providers → Email.
-5. **Solo entrar** → debe decir `JWT: si`.
-6. **Cargar demo RLS** → JSON con `your_org: acme-alpha` y `hidden_org: beta-shadow`.
+3. Run the web assistant:
 
-Con eso ya demuestras multi-tenant + RLS + bootstrap. El chat en la UI es extra.
+```bash
+cd apps/web
+npm install
+npm run dev
+```
 
-## MCP desde Cursor (sin Azure)
+4. In Supabase Dashboard → **Authentication → Providers → Email**, disable **Confirm email** for quick demo testing.
+5. Sign up / Sign in → status shows `JWT: yes`.
+6. Click **Seed RLS Demo** → returns JSON confirming `your_org: "acme-alpha"` and `hidden_org: "beta-shadow"`.
+7. Click any quick-prompt chip (or ask a question) and expand **View MCP tool trace** to inspect the raw JSON-RPC payload.
 
-Copia `.cursor/mcp.json.example` a `.cursor/mcp.json` y apunta a tu function:
+## Connect from Cursor (Direct MCP)
+
+Copy `.cursor/mcp.json.example` to `.cursor/mcp.json` and point it to your deployed `mcp-server` function:
 
 ```json
 {
@@ -65,43 +71,43 @@ Copia `.cursor/mcp.json.example` a `.cursor/mcp.json` y apunta a tu function:
 }
 ```
 
-El `USER_JWT` es el `access_token` de una sesion iniciada (mismo usuario de la demo). Las tools heredan RLS de ese JWT.
+`USER_JWT` is the `access_token` of a signed-in user session. Every MCP tool call inherits PostgreSQL RLS permissions from that JWT.
 
-## Tools
+## Allowlisted MCP Tools
 
 | Tool | Guardrail |
 |---|---|
-| list_tables | catalog only |
-| list_policies | read only |
-| list_functions | read only |
-| explain_query | blocks writes |
-| propose_rls | draft, does not apply |
-| run_readonly_sql | SELECT/WITH/EXPLAIN + read-only txn |
+| `list_tables` | Catalog metadata only (`public` schema) |
+| `list_policies` | Read-only `pg_policy` inspection |
+| `list_functions` | Read-only `pg_proc` inspection |
+| `explain_query` | `SELECT`/`WITH` only + read-only transaction + `EXPLAIN (FORMAT JSON)` |
+| `propose_rls` | Returns a reviewable SQL migration draft (`applied: false`) |
+| `run_readonly_sql` | Single `SELECT`/`WITH` statement + `default_transaction_read_only = on` + `3s` timeout + RLS |
 
-## LLM opcional (Azure u otro)
+## Optional Azure OpenAI Configuration
 
-Azure for Students a menudo tiene **cuota 0** en modelos OpenAI; no es bloqueante.
-
-Si mas adelante tienes endpoint + key:
+If you want `chat` to use Azure OpenAI instead of the built-in MCP router:
 
 ```bash
-npx supabase secrets set AZURE_OPENAI_ENDPOINT=https://YOUR.openai.azure.com
+npx supabase secrets set AZURE_OPENAI_ENDPOINT=https://YOUR_RESOURCE.openai.azure.com
 npx supabase secrets set AZURE_OPENAI_API_KEY=...
 npx supabase secrets set AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini
 npx supabase functions deploy chat --project-ref YOUR_REF
 ```
 
-Sin secrets, `chat` responde que uses MCP desde Cursor.
+## Security Model & Evals
 
-## Seguridad
+1. Client only uses the public `anon`/`publishable` key + user session JWT.
+2. `run_readonly_sql` and `explain_query` strip comments, reject multi-statement queries, block write/DDL/session keywords (`INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `ANALYZE`, `SET`, `LOCK`, etc.), enforce `SET LOCAL default_transaction_read_only = on`, and cap execution at `3s`.
+3. `propose_rls` drafts policies without executing DDL.
+4. Per-user rate limiting (`40 tools/min`) tracked by `auth.uid()`.
 
-1. Cliente: anon/publishable key + user JWT.
-2. `run_readonly_sql` rechaza INSERT/UPDATE/DELETE/DROP/ALTER.
-3. `propose_rls` no aplica migraciones.
-4. Rate limit por `auth.uid()` en el servidor MCP.
+Run the router + SQL guardrail evaluation suite:
 
 ```bash
 npm run evals
 ```
+
+## License
 
 MIT
