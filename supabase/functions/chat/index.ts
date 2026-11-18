@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { AzureOpenAI } from "npm:openai@4";
 
 const SYSTEM = `You are Forge, a Supabase debugging assistant.
 Use tools. Never invent columns or tables.
@@ -6,6 +7,18 @@ Never ask to run INSERT/UPDATE/DELETE/DROP.
 When proposing RLS, remind the user it is a draft and must be reviewed.`;
 
 type ChatMsg = { role: "system" | "user" | "assistant" | "tool"; content: string };
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+};
+
+function jsonResponse(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+  });
+}
 
 async function mcpCall(req: Request, name: string, args: Record<string, unknown>) {
   const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/mcp-server`;
@@ -26,18 +39,6 @@ async function mcpCall(req: Request, name: string, args: Record<string, unknown>
   return await res.json();
 }
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
-};
-
-function jsonResponse(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
-  });
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORS_HEADERS });
@@ -50,19 +51,32 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } },
     );
     const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return jsonResponse({ role: "assistant", content: "No autorizado (JWT invalido o ausente)." }, 401);
+    if (!userData.user) {
+      return jsonResponse({ role: "assistant", content: "No autorizado (JWT invalido o ausente)." }, 401);
+    }
 
     const { messages } = (await req.json()) as { messages: ChatMsg[] };
-    const endpoint = Deno.env.get("AZURE_OPENAI_ENDPOINT");
-    const key = Deno.env.get("AZURE_OPENAI_API_KEY");
-    const deployment = Deno.env.get("AZURE_OPENAI_DEPLOYMENT") ?? "gpt-4o-mini";
+    const rawEndpoint = Deno.env.get("AZURE_OPENAI_ENDPOINT")?.trim();
+    const key = Deno.env.get("AZURE_OPENAI_API_KEY")?.trim();
+    const deployment = Deno.env.get("AZURE_OPENAI_DEPLOYMENT")?.trim() || "gpt-4o-mini";
+    const apiVersion = Deno.env.get("AZURE_OPENAI_API_VERSION")?.trim() || "2024-08-01-preview";
 
-    if (!endpoint || !key) {
+    if (!rawEndpoint || !key) {
       return jsonResponse({
         role: "assistant",
         content: "Azure OpenAI no esta configurado. Usa el MCP directo desde Cursor.",
       });
     }
+
+    // Si en el secret se pego la URL completa de Azure Portal (/openai/deployments/...), extraemos solo el origin
+    const endpoint = new URL(rawEndpoint).origin;
+
+    const azureClient = new AzureOpenAI({
+      apiKey: key,
+      endpoint,
+      deployment,
+      apiVersion,
+    });
 
     const tools = [
       { type: "function", function: { name: "list_tables", description: "List public tables", parameters: { type: "object", properties: {} } } },
@@ -73,17 +87,21 @@ Deno.serve(async (req) => {
       { type: "function", function: { name: "run_readonly_sql", description: "Run SELECT as the current user", parameters: { type: "object", properties: { sql: { type: "string" } }, required: ["sql"] } } },
     ];
 
-    const payloadMessages: unknown[] = [{ role: "system", content: SYSTEM }, ...messages.map((m) => ({ role: m.role, content: m.content }))];
-    const url = `${endpoint.replace(/\/$/, "")}/openai/deployments/${deployment}/chat/completions?api-version=2024-08-01-preview`;
+    // deno-lint-ignore no-explicit-any
+    const payloadMessages: any[] = [
+      { role: "system", content: SYSTEM },
+      ...messages.map((m) => ({ role: m.role, content: m.content })),
+    ];
 
-    async function complete(msgs: unknown[]) {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "api-key": key! },
-        body: JSON.stringify({ messages: msgs, tools, temperature: 0.2 }),
+    // deno-lint-ignore no-explicit-any
+    async function complete(msgs: any[]) {
+      return await azureClient.chat.completions.create({
+        model: deployment,
+        messages: msgs,
+        // deno-lint-ignore no-explicit-any
+        tools: tools as any,
+        temperature: 0.2,
       });
-      if (!res.ok) throw new Error(await res.text());
-      return await res.json();
     }
 
     let completion = await complete(payloadMessages);
@@ -103,7 +121,10 @@ Deno.serve(async (req) => {
     }
 
     return jsonResponse({ role: "assistant", content: choice?.message?.content ?? "", trace });
-  } catch (e) {
-    return jsonResponse({ role: "assistant", content: `Error en chat: ${(e as Error).message}` }, 500);
+  } catch (error) {
+    return jsonResponse(
+      { role: "assistant", content: `Error conectando con Azure: ${(error as Error).message}` },
+      500,
+    );
   }
 });
