@@ -5,7 +5,7 @@ MCP server + debugging assistant running on **Supabase Edge Functions**.
 Forge inspects database schemas, explains SQL query plans, drafts RLS policies, and executes **read-only** queries scoped to the signed-in user's JWT. No `service_role` key is ever exposed to the client.
 
 Hosted setup guide: [HOSTED.md](./HOSTED.md)  
-Repository: https://github.com/mcontrerasmalpar-pixel/forge-mcp-supabase
+Repository: https://github.com/mcontrerasmalpar-pixel/Forge
 
 ## What It Demonstrates
 
@@ -35,8 +35,8 @@ The `chat` Edge Function orchestrates tool calls via `AzureOpenAI` when configur
 The web assistant is pre-wired to a live hosted Supabase project protected by PostgreSQL RLS (`https://skxljgnpjmnekvecpfjd.supabase.co`), with a ready-to-use demo account pre-filled in the UI:
 
 ```bash
-git clone https://github.com/mcontrerasmalpar-pixel/forge-mcp-supabase.git
-cd forge-mcp-supabase/apps/web
+git clone https://github.com/mcontrerasmalpar-pixel/Forge.git
+cd Forge/apps/web
 npm install
 npm run dev
 ```
