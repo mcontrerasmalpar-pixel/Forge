@@ -5,8 +5,12 @@ import { createClient } from "@supabase/supabase-js";
 
 type Msg = { role: "user" | "assistant"; content: string; trace?: unknown };
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+const DEMO_SUPABASE_URL = "https://skxljgnpjmnekvecpfjd.supabase.co";
+const DEMO_SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNreGxqZ25wam1uZWt2ZWNwZmpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NjY3MDcsImV4cCI6MjEwNDM0MjcwN30.VLFU-Rh09Agb9c9JI3yTxUob4-QEZR3rUlMSJgI934U";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEMO_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEMO_SUPABASE_ANON_KEY;
 const hasSupabaseConfig = Boolean(supabaseUrl && supabaseKey);
 
 export default function Page() {
@@ -17,8 +21,8 @@ export default function Page() {
     });
   }, []);
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("demo@forge.dev");
+  const [password, setPassword] = useState("ForgeDemo123!");
   const [input, setInput] = useState("How many documents can I see and what are their titles?");
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [busy, setBusy] = useState(false);

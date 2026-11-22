@@ -30,7 +30,38 @@ PostgreSQL
 
 The `chat` Edge Function orchestrates tool calls via `AzureOpenAI` when configured, or falls back to a deterministic MCP tool router so every tool (`list_tables`, `list_policies`, `list_functions`, `explain_query`, `propose_rls`, `run_readonly_sql`) can be tested live without paid LLM quota.
 
-## Quick Start (Hosted Supabase Demo)
+## Try It in 30 Seconds (Zero Setup — Connects to Hosted Demo Backend)
+
+The web assistant is pre-wired to a live hosted Supabase project protected by PostgreSQL RLS (`https://skxljgnpjmnekvecpfjd.supabase.co`), with a ready-to-use demo account pre-filled in the UI:
+
+```bash
+git clone https://github.com/mcontrerasmalpar-pixel/forge-mcp-supabase.git
+cd forge-mcp-supabase/apps/web
+npm install
+npm run dev
+```
+
+1. Open **http://localhost:3000**
+2. Click **Sign in** (pre-filled with `demo@forge.dev` / `ForgeDemo123!`) → status updates to `JWT: yes · demo@forge.dev`.
+3. Click **Seed RLS Demo** → seeds two tenants (`your_org: "acme-alpha"` and `hidden_org: "beta-shadow"`).
+4. Click any quick-prompt chip (e.g. *How many documents can I see and what are their titles?* or *DROP TABLE documents*) and expand **View MCP tool trace** to inspect the raw JSON-RPC 2.0 tool call and response.
+
+Run the automated router + SQL guardrail test suite from the repo root:
+
+```bash
+npm run evals
+```
+
+## Key Files for Code Review
+
+- [`supabase/functions/mcp-server/index.ts`](./supabase/functions/mcp-server/index.ts) — Edge Function MCP server (`initialize`, `tools/list`, `tools/call`, SQL read-only validator, rate limiter).
+- [`supabase/migrations/20260907000000_init.sql`](./supabase/migrations/20260907000000_init.sql) — Multi-tenant schema (`organizations`, `memberships`, `documents`, `usage_events`) and RLS policies using `my_org_ids()`.
+- [`supabase/migrations/20260907000001_forge_rpcs.sql`](./supabase/migrations/20260907000001_forge_rpcs.sql) — Catalog inspection RPCs (`security definer`, restricted to `service_role`) and query execution RPCs (`security invoker`, `default_transaction_read_only = on`, `statement_timeout = '3s'`).
+- [`supabase/migrations/20260907000002_bootstrap_demo.sql`](./supabase/migrations/20260907000002_bootstrap_demo.sql) — Idempotent two-tenant RLS fixture (`acme-alpha` vs `beta-shadow`).
+- [`supabase/functions/chat/index.ts`](./supabase/functions/chat/index.ts) — Optional `AzureOpenAI` tool-calling loop with a built-in zero-key MCP router fallback.
+- [`evals/run.mjs`](./evals/run.mjs) — 12 automated checks covering tool routing and SQL injection/DDL guardrails.
+
+## Deploy to Your Own Supabase Project
 
 1. Create a Supabase project and link this repository (or run `npx supabase db push` + `npx supabase functions deploy`).
 2. Create `apps/web/.env.local`:
