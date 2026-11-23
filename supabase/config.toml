@@ -2,7 +2,7 @@ project_id = "skxljgnpjmnekvecpfjd"
 
 [functions.mcp-server]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 entrypoint = "./functions/mcp-server/index.ts"
 
 [functions.chat]

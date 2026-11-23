@@ -22,7 +22,7 @@ function json(data: unknown, status = 200) {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+      "Access-Control-Allow-Headers": "authorization, apikey, content-type, accept, mcp-session-id",
     },
   });
 }
@@ -129,6 +129,7 @@ Deno.serve(async (req) => {
   let body: { jsonrpc?: string; id?: string | number | null; method?: string; params?: { name?: string; arguments?: Record<string, unknown>; protocolVersion?: string } };
   try { body = await req.json(); } catch { return json({ error: "invalid json" }, 400); }
 
+  // Public MCP discovery & handshake methods (no auth required; zero sensitive data)
   if (body.method === "initialize") {
     return json({
       jsonrpc: "2.0",
@@ -136,7 +137,7 @@ Deno.serve(async (req) => {
       result: {
         protocolVersion: body.params?.protocolVersion ?? "2024-11-05",
         capabilities: { tools: {} },
-        serverInfo: { name: "forge-mcp-supabase", version: "0.1.0" },
+        serverInfo: { name: "forge-mcp-supabase", version: "0.1.1" },
       },
     });
   }
@@ -145,7 +146,7 @@ Deno.serve(async (req) => {
       status: 202,
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+        "Access-Control-Allow-Headers": "authorization, apikey, content-type, accept, mcp-session-id",
       },
     });
   }
@@ -153,24 +154,31 @@ Deno.serve(async (req) => {
     return json({ jsonrpc: "2.0", id: body.id ?? null, result: {} });
   }
   if (body.method === "tools/list") {
-    const supabase = userClient(req);
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userData.user) {
-      return json({ jsonrpc: "2.0", id: body.id ?? null, error: { code: -32001, message: "unauthorized" } }, 401);
-    }
-    return json({ jsonrpc: "2.0", id: body.id, result: { tools: TOOLS } });
+    return json({ jsonrpc: "2.0", id: body.id ?? null, result: { tools: TOOLS } });
   }
+
+  // All other methods (including tools/call) require a valid authenticated user JWT
+  const authHeader = req.headers.get("Authorization") ?? "";
+  if (!authHeader.toLowerCase().startsWith("bearer ")) {
+    return json({ jsonrpc: "2.0", id: body.id ?? null, error: { code: -32001, message: "unauthorized" } }, 401);
+  }
+  const supabase = userClient(req);
+  const { data: userData, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !userData.user) {
+    return json({ jsonrpc: "2.0", id: body.id ?? null, error: { code: -32001, message: "unauthorized" } }, 401);
+  }
+
   if (body.method === "tools/call") {
     const name = body.params?.name as ToolName;
     if (!ALLOWED_TOOLS.includes(name)) {
-      return json({ jsonrpc: "2.0", id: body.id, error: { code: -32601, message: `tool not allowed: ${name}` } });
+      return json({ jsonrpc: "2.0", id: body.id ?? null, error: { code: -32601, message: `tool not allowed: ${name}` } });
     }
     try {
       const result = await callTool(name, body.params?.arguments ?? {}, req);
-      return json({ jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] } });
+      return json({ jsonrpc: "2.0", id: body.id ?? null, result: { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] } });
     } catch (e) {
-      return json({ jsonrpc: "2.0", id: body.id, error: { code: -32000, message: (e as Error).message } });
+      return json({ jsonrpc: "2.0", id: body.id ?? null, error: { code: -32000, message: (e as Error).message } });
     }
   }
-  return json({ jsonrpc: "2.0", id: body.id, error: { code: -32601, message: `unknown method ${body.method}` } });
+  return json({ jsonrpc: "2.0", id: body.id ?? null, error: { code: -32601, message: `unknown method ${body.method}` } });
 });
