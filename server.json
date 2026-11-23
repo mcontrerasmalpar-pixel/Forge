@@ -1,7 +1,7 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mcontrerasmalpar-pixel/forge",
-  "description": "Supabase Edge Functions MCP server with allowlisted tools and PostgreSQL Row Level Security (RLS).",
+  "description": "Supabase Edge Functions MCP server with allowlisted tools and PostgreSQL RLS.",
   "version": "0.1.0",
   "repository": {
     "url": "https://github.com/mcontrerasmalpar-pixel/Forge",

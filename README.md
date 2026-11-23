@@ -2,8 +2,8 @@
 
 [![MCP Evals & SQL Guardrails](https://github.com/mcontrerasmalpar-pixel/Forge/actions/workflows/evals.yml/badge.svg)](https://github.com/mcontrerasmalpar-pixel/Forge/actions/workflows/evals.yml)
 [![Deploy Supabase Edge Functions](https://github.com/mcontrerasmalpar-pixel/Forge/actions/workflows/deploy-functions.yml/badge.svg)](https://github.com/mcontrerasmalpar-pixel/Forge/actions/workflows/deploy-functions.yml)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-official-0891b2)](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.mcontrerasmalpar-pixel/forge)
 [![Supabase](https://img.shields.io/badge/Supabase-Edge_Functions_%26_RLS-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
-[![MCP](https://img.shields.io/badge/MCP-JSON--RPC_2.0-000000)](https://modelcontextprotocol.io)
 [![Deno](https://img.shields.io/badge/Deno-Edge_Runtime-000000?logo=deno&logoColor=white)](https://deno.com)
 [![Next.js](https://img.shields.io/badge/Next.js-15-000000?logo=next.js&logoColor=white)](https://nextjs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
