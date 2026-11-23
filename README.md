@@ -1,5 +1,6 @@
 # Forge
 
+[![MCP Evals & SQL Guardrails](https://github.com/mcontrerasmalpar-pixel/Forge/actions/workflows/evals.yml/badge.svg)](https://github.com/mcontrerasmalpar-pixel/Forge/actions/workflows/evals.yml)
 [![Deploy Supabase Edge Functions](https://github.com/mcontrerasmalpar-pixel/Forge/actions/workflows/deploy-functions.yml/badge.svg)](https://github.com/mcontrerasmalpar-pixel/Forge/actions/workflows/deploy-functions.yml)
 [![Supabase](https://img.shields.io/badge/Supabase-Edge_Functions_%26_RLS-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
 [![MCP](https://img.shields.io/badge/MCP-JSON--RPC_2.0-000000)](https://modelcontextprotocol.io)
@@ -67,6 +68,7 @@ npm run evals
 - [`supabase/migrations/20260907000002_bootstrap_demo.sql`](./supabase/migrations/20260907000002_bootstrap_demo.sql) — Idempotent two-tenant RLS fixture (`acme-alpha` vs `beta-shadow`).
 - [`supabase/functions/chat/index.ts`](./supabase/functions/chat/index.ts) — Optional `AzureOpenAI` tool-calling loop with a built-in zero-key MCP router fallback.
 - [`evals/run.mjs`](./evals/run.mjs) — 12 automated checks covering tool routing and SQL injection/DDL guardrails.
+- [`server.json`](./server.json) — Official MCP Registry manifest (`streamable-http` remote specification).
 
 ## Deploy to Your Own Supabase Project
 
