@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/forge-banner.png" alt="Forge — Supabase MCP Server & Debugging Assistant" width="100%" />
+  <img src="./assets/forge-banner.gif" alt="Forge — Supabase MCP Server & Debugging Assistant" width="100%" />
 </p>
 
 # Forge
