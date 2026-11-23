@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./assets/forge-banner.png" alt="Forge — Supabase MCP Server & Debugging Assistant" width="100%" />
+</p>
+
 # Forge
 
 [![MCP Evals & SQL Guardrails](https://github.com/mcontrerasmalpar-pixel/Forge/actions/workflows/evals.yml/badge.svg)](https://github.com/mcontrerasmalpar-pixel/Forge/actions/workflows/evals.yml)
